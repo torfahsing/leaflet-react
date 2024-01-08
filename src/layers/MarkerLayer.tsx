@@ -4,6 +4,8 @@ import { Cities } from "../data/cities";
 import { Button, Card, InputNumber, Space } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import { useState } from "react";
+import { GeoFilterType } from "./ContinentsPolygonLayer";
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 
 //React.Dispatch<React.SetStateAction<RadiusFilterType | undefined>>
 
@@ -14,6 +16,7 @@ type MarkerProps = {
     React.SetStateAction<RadiusFilterType | undefined>
   >;
   getRadiusFilter: () => RadiusFilterType | null | undefined;
+  getGeoFilter: () => GeoFilterType | undefined | null;
 };
 
 type FeatureType = Cities["features"][0];
@@ -98,7 +101,9 @@ const MarkerLayer = ({
   data,
   setRadiusFilter,
   getRadiusFilter,
+  getGeoFilter,
 }: MarkerProps) => {
+  const geoFilter = getGeoFilter();
   const radiusFilter = getRadiusFilter();
 
   const coordinates = radiusFilter
@@ -111,15 +116,30 @@ const MarkerLayer = ({
 
   return data.features
     .filter((currentFeature) => {
+      let filterByGeo = false;
+      let filterByRadius = false;
       if (centerPoint && radiusFilter) {
         const { coordinates } = currentFeature.geometry;
         const currentPoint = L.latLng(coordinates[1], coordinates[0]);
-        return (
-          centerPoint.distanceTo(currentPoint) / 1000 < radiusFilter.radius
-        );
+        return (filterByRadius =
+          centerPoint.distanceTo(currentPoint) / 1000 < radiusFilter.radius);
       }
 
-      return true;
+      if (geoFilter) {
+        filterByGeo = booleanPointInPolygon(currentFeature, geoFilter);
+      }
+
+      let doFilter = true;
+
+      if (geoFilter && radiusFilter) {
+        doFilter = filterByGeo && filterByRadius;
+      } else if (geoFilter && !radiusFilter) {
+        doFilter = filterByGeo;
+      } else if (radiusFilter && !geoFilter) {
+        doFilter = filterByRadius;
+      }
+
+      return doFilter;
     })
     .map((feature) => {
       const { coordinates } = feature.geometry;
